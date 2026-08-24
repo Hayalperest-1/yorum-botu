@@ -1,0 +1,38 @@
+name: Google Yorum -> Instagram Hikaye Botu
+
+on:
+  schedule:
+    # UTC saatine göre çalışır; her 15 dakikada bir tetiklenir.
+    # (GitHub bazen birkaç dakika gecikmeli tetikleyebilir, normaldir.)
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}  # Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
+
+permissions:
+  contents: write  # üretilen görseli depoya commit'leyebilmek için gerekli
+
+concurrency:
+  group: review-story-bot
+  cancel-in-progress: false  # aynı anda iki çalışma çakışıp git push çakışması yaratmasın
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları kur
+        run: pip install -r requirements.txt
+
+      - name: Botu çalıştır
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REVIEW_SOURCE_BUSINESS_NAME: ${{ vars.REVIEW_SOURCE_BUSINESS_NAME }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python -m automation.main
