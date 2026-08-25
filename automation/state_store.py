@@ -21,6 +21,9 @@ DEFAULT_STATE = {
     "next_template_index": 0,
     "processed_message_ids": [],
     "processed_review_keys": [],
+    # Yorum metni henüz bulunamadığı için paylaşılmayı bekleyen yorumlar:
+    # {review_key: {"attempts": int, "reviewer_name":, "rating":, "business":}}
+    "pending_reviews": {},
 }
 
 # processed_message_ids / processed_review_keys listeleri sınırsız büyümesin

@@ -47,6 +47,14 @@ from automation.git_publish import raw_url_for, commit_and_push
 
 GENERATED_DIR = "assets/generated"
 
+# Bir yorumun metni yoksa (genelde Gmail kaynaklı - Gmail bildirim maili
+# yorumun yazılı içeriğini hiç vermiyor), bunu METİNSİZ hemen paylaşmak
+# yerine harita taramasının o yorumu metniyle bulmasını bekliyoruz. Bot
+# 15 dakikada bir çalıştığı için, bu sayı x 15 dakika kadar bekler (6 =
+# yaklaşık 1,5 saat) - o kadar süre içinde de harita taraması bulamazsa,
+# sonsuza kadar bekletmemek için elimizdeki bilgiyle (metinsiz) paylaşır.
+MAX_TEXT_WAIT_ATTEMPTS = 6
+
 
 def _collect_new_reviews(cfg, processed_message_ids: set, processed_review_keys: set):
     """İki kaynaktan gelen yorumları birleştirir, daha önce işlenmiş
@@ -89,6 +97,7 @@ def main():
     state = state_store.load()
     processed_message_ids = set(state.get("processed_message_ids", []))
     processed_review_keys = set(state.get("processed_review_keys", []))
+    pending_reviews = dict(state.get("pending_reviews", {}))
 
     reviews = _collect_new_reviews(cfg, processed_message_ids, processed_review_keys)
 
@@ -117,8 +126,41 @@ def main():
 
         reviewer_name = review["reviewer_name"]
         rating = review["rating"]
+        review_key_val = review["review_key"]
+        has_text = bool((review.get("review_text") or "").strip())
 
         print(f"İşleniyor ({review['source']}): {reviewer_name} - {rating} yıldız ({review['business']})")
+
+        if not has_text:
+            prior_attempts = pending_reviews.get(review_key_val, {}).get("attempts", 0)
+            attempts = prior_attempts + 1
+            if attempts < MAX_TEXT_WAIT_ATTEMPTS:
+                pending_reviews[review_key_val] = {
+                    "attempts": attempts,
+                    "reviewer_name": reviewer_name,
+                    "rating": rating,
+                    "business": review.get("business", ""),
+                }
+                print(f"  -> Yorum metni henüz yok (kaynak: {review['source']}), harita taramasının "
+                      f"bulması bekleniyor (deneme {attempts}/{MAX_TEXT_WAIT_ATTEMPTS}) -> BU RUN'DA PAYLAŞILMADI.")
+                # Aynı Gmail mailini her run'da yeniden taramamak için
+                # message_id'yi işlendi say - review_key'i DEĞİL (o hâlâ
+                # pending_reviews'te bekliyor, harita bulunca ya da limit
+                # dolunca işlenecek).
+                if review.get("source") == "gmail" and review.get("message_id"):
+                    newly_processed_message_ids.append(review["message_id"])
+                state_changed = True
+                continue
+            else:
+                print(f"  -> {MAX_TEXT_WAIT_ATTEMPTS} denemede de yorum metni bulunamadı, "
+                      f"metin OLMADAN paylaşılıyor.")
+                pending_reviews.pop(review_key_val, None)
+                state_changed = True
+        elif review_key_val in pending_reviews:
+            # Bekleyen bir yorumun metni artık bulundu (harita taraması
+            # başarılı oldu) - beklemeden çık.
+            pending_reviews.pop(review_key_val, None)
+            state_changed = True
 
         try:
             if rating >= cfg.MIN_RATING_TO_POST:
@@ -179,6 +221,7 @@ def main():
         state["next_template_index"] = next_template_index
         state["processed_message_ids"] = list(processed_message_ids) + newly_processed_message_ids
         state["processed_review_keys"] = list(processed_review_keys) + newly_processed_review_keys
+        state["pending_reviews"] = pending_reviews
         state_store.save_and_commit(
             state,
             commit_message=f"state: {processed} yorum işlendi, sıradaki şablon #{next_template_index}",

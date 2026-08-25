@@ -286,7 +286,21 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
             page.wait_for_timeout(500)
             _shot(page, "2_after_consent")
 
-            opened = _open_reviews_tab(page)
+            # 'Yorumlar' sekmesini açma bazen ilk denemede başarısız oluyor
+            # - muhtemelen sayfa/JS tam hydrate olmadan tıklamayı deniyoruz.
+            # Bu yüzden birkaç kez, aralarda ekstra bekleyerek tekrar
+            # deniyoruz (pes etmeden önce).
+            opened = False
+            for attempt in range(1, 4):
+                opened = _open_reviews_tab(page)
+                if opened:
+                    if attempt > 1:
+                        print(f"[maps_watch] Yorumlar sekmesi {attempt}. denemede açıldı.")
+                    break
+                print(f"[maps_watch] Yorumlar sekmesi {attempt}. denemede açılamadı, "
+                      f"biraz bekleyip tekrar denenecek.")
+                page.wait_for_timeout(2500)
+
             _shot(page, "3_after_reviews_tab")
             if not opened:
                 print("[maps_watch] Yorumlar sekmesi açılamadığı için taramaya devam edilemiyor.")
