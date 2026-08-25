@@ -24,7 +24,14 @@ class InstagramClient:
     def __init__(self, access_token: str, ig_user_id: str, api_version: str = "v21.0"):
         self.access_token = access_token
         self.ig_user_id = ig_user_id
-        self.base = f"https://graph.facebook.com/{api_version}"
+        # NOT: Facebook Sayfası GEREKTİRMEYEN "Instagram API with Instagram
+        # Login" akışı kullanılıyor (instagram_business_basic +
+        # instagram_business_content_publish izinleriyle üretilen token).
+        # Bu akışta istekler graph.facebook.com'a DEĞİL, graph.instagram.com'a
+        # atılıyor - Meta'nın resmi dokümantasyonundaki örnekler de
+        # sürüm (v21.0 gibi) olmadan gösteriliyor, o yüzden burada da
+        # sürümsüz bırakıldı.
+        self.base = "https://graph.instagram.com"
 
     def post_story(self, media_url: str, is_video: bool = False, max_wait_seconds: int = None) -> str:
         """
