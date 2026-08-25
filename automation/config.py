@@ -31,6 +31,12 @@ class Config:
     # Boş bırakılırsa hiçbir filtre uygulanmaz.
     REVIEW_SOURCE_BUSINESS_NAME = os.environ.get("REVIEW_SOURCE_BUSINESS_NAME", "")
 
+    # --- Google Haritalar taraması (Gmail bildirim mailini beklemeden,
+    # doğrudan işletmenin Haritalar sayfasından yeni yorumları okur -
+    # opsiyonel: boş bırakılırsa bu adım tamamen atlanır, sadece Gmail
+    # yolu çalışır). automation/maps_watch.py içinde detaylı açıklama var.
+    GOOGLE_MAPS_URL = os.environ.get("GOOGLE_MAPS_URL", "")
+
     # --- Instagram / Meta Graph API ---
     IG_ACCESS_TOKEN = _require("IG_ACCESS_TOKEN")
     IG_USER_ID = _require("IG_USER_ID")

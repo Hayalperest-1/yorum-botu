@@ -20,9 +20,11 @@ STATE_FILE = "automation/state.json"
 DEFAULT_STATE = {
     "next_template_index": 0,
     "processed_message_ids": [],
+    "processed_review_keys": [],
 }
 
-# processed_message_ids listesi sınırsız büyümesin diye son N tanesini tutuyoruz
+# processed_message_ids / processed_review_keys listeleri sınırsız büyümesin
+# diye son N tanesini tutuyoruz
 MAX_PROCESSED_IDS = 1000
 
 
@@ -37,10 +39,14 @@ def load() -> dict:
 
 
 def save_and_commit(state: dict, commit_message: str) -> None:
-    # listeyi sınırlı tut
+    # listeleri sınırlı tut
     ids = state.get("processed_message_ids", [])
     if len(ids) > MAX_PROCESSED_IDS:
         state["processed_message_ids"] = ids[-MAX_PROCESSED_IDS:]
+
+    keys = state.get("processed_review_keys", [])
+    if len(keys) > MAX_PROCESSED_IDS:
+        state["processed_review_keys"] = keys[-MAX_PROCESSED_IDS:]
 
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w") as f:

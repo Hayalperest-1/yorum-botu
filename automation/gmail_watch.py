@@ -23,6 +23,8 @@ import re
 from datetime import datetime, timedelta
 from email.header import decode_header
 
+from automation import review_key
+
 SENDER = "businessprofile-noreply@google.com"
 
 # Örnek konu satırı: "Hasan, Niğde Gezi Otobüsü için yorum yaptı"
@@ -122,10 +124,12 @@ def fetch_new_reviews(gmail_address: str, app_password: str, already_processed: 
             rating = int(rating_match.group(1)) if rating_match else 0
 
             results.append({
+                "source": "gmail",
                 "message_id": message_id,
                 "reviewer_name": reviewer_name,
                 "rating": rating,
                 "business": business_name,
+                "review_key": review_key.make_key(reviewer_name, rating, business_name),
             })
     finally:
         try:

@@ -154,6 +154,25 @@ Repo sayfanda **Settings > Secrets and variables > Actions**'a git.
 değil ama bir Gmail birden fazla işletme yönetiyorsa önemli):
 - `REVIEW_SOURCE_BUSINESS_NAME` → Google Business Profile'daki tam
   işletme adı, örn. `Niğde Gezi Otobüsü`
+- `GOOGLE_MAPS_URL` → işletmenin Google Haritalar linki (opsiyonel ama
+  önerilir — aşağıdaki "Google Haritalar taraması" bölümüne bak)
+
+### 4.1) Google Haritalar taraması (opsiyonel, önerilir)
+
+Gmail bildirim maili bazen geç gelebiliyor (hatta bazı hesaplarda hiç
+gelmeyebiliyor). Bunu aşmak için bot, ek olarak işletmenin Google
+Haritalar sayfasını da doğrudan tarayıp yeni yorumları okuyabiliyor —
+mail beklemeden. Bunun için `GOOGLE_MAPS_URL` değişkenine işletmenin
+Haritalar linkini eklemen yeterli (Google Haritalar'da işletmeyi aç,
+"Paylaş" ile linki al).
+
+Bu resmi bir Google API'si DEĞİL, gerçek bir tarayıcı açıp (Playwright)
+sayfayı okuyor — kart/onay gerektirmiyor ama Google sayfa tasarımını
+değiştirirse (nadiren olur) bu kısım bozulabilir. Böyle bir durumda
+Actions loglarında `[maps_watch]` ile başlayan satırları bana gösterirsen
+düzeltiriz. `GOOGLE_MAPS_URL` boş bırakılırsa bu adım tamamen atlanır,
+sadece Gmail yoluyla devam eder — yani bu opsiyonel bir ek güvence,
+Gmail yolunun yerini almıyor, ikisi birlikte çalışıyor.
 
 ### 5) Test et
 
