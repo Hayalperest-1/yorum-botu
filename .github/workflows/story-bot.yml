@@ -40,3 +40,12 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python -m automation.main
+
+      - name: Harita taraması ekran görüntülerini yükle (teşhis için)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maps-debug-screenshots
+          path: debug_screenshots/
+          if-no-files-found: ignore
+          retention-days: 7

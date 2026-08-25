@@ -51,7 +51,8 @@ class InstagramClient:
             data["image_url"] = media_url
 
         resp = requests.post(f"{self.base}/{self.ig_user_id}/media", data=data, timeout=30)
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"Instagram medya oluşturma hatası ({resp.status_code}): {resp.text}")
         return resp.json()["id"]
 
     def _wait_until_ready(self, container_id: str, max_wait_seconds: int) -> None:
@@ -62,7 +63,8 @@ class InstagramClient:
                 params={"fields": "status_code", "access_token": self.access_token},
                 timeout=30,
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                raise RuntimeError(f"Instagram durum sorgusu hatası ({resp.status_code}): {resp.text}")
             status = resp.json().get("status_code")
             if status == "FINISHED":
                 return
@@ -77,5 +79,6 @@ class InstagramClient:
             data={"creation_id": container_id, "access_token": self.access_token},
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"Instagram yayınlama hatası ({resp.status_code}): {resp.text}")
         return resp.json()["id"]

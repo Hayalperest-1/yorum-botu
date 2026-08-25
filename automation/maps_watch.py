@@ -8,6 +8,9 @@ bu yöntem doğrudan Google Haritalar'daki güncel duruma bakar.
   - Google sayfa tasarımını değiştirirse bu kod bozulabilir (seçiciler
     (selector) eskir). Böyle bir durumda main.py'nin loglarında
     "[maps_watch]" ile başlayan satırlara bakıp burayı güncellemek gerekir.
+  - Her adımda debug_screenshots/ klasörüne bir ekran görüntüsü kaydediyoruz
+    (GitHub Actions'ta "workflow artifact" olarak indirilebilir) - bir şey
+    ters giderse, botun tam olarak hangi ekranda takıldığını görebiliriz.
   - Bu yüzden her adım try/except ile korunuyor: bir şey ters giderse tüm
     çalıştırma çökmüyor, sadece boş liste dönüyor ve Gmail yolu (varsa)
     devam ediyor.
@@ -19,15 +22,29 @@ review_key, iki kaynaktan (Gmail + Haritalar) aynı yorum gelirse ikinci
 kez paylaşılmasını önlemek için review_key.py ile üretiliyor.
 """
 
+import os
 import re
 
 from automation import review_key
 
 MAX_SCROLL_ATTEMPTS = 8
 STAR_ARIA_RE = re.compile(r"(\d+(?:[.,]\d+)?)")
+REVIEWS_LINK_RE = re.compile(r"\d+[\.,]?\d*\s*(yorum|review|değerlendirme)", re.IGNORECASE)
+
+DEBUG_DIR = "debug_screenshots"
 
 
-def _accept_or_dismiss_consent(page):
+def _shot(page, name: str) -> None:
+    try:
+        os.makedirs(DEBUG_DIR, exist_ok=True)
+        path = os.path.join(DEBUG_DIR, f"{name}.png")
+        page.screenshot(path=path)
+        print(f"[maps_watch] ekran görüntüsü kaydedildi: {path}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[maps_watch] ekran görüntüsü alınamadı ({name}): {exc}")
+
+
+def _accept_or_dismiss_consent(page) -> bool:
     """Google'ın çerez/onay ekranını kapatmayı dener (birden fazla dil/metin
     varyasyonunu sırayla dener, hiçbiri bulunamazsa sessizce devam eder)."""
     candidates = [
@@ -41,41 +58,75 @@ def _accept_or_dismiss_consent(page):
             if btn.count() > 0:
                 btn.first.click(timeout=3000)
                 page.wait_for_timeout(1000)
-                return
+                print(f"[maps_watch] onay ekranı kapatıldı ('{text}' butonuna tıklandı).")
+                return True
         except Exception:
             continue
+    print("[maps_watch] onay ekranı bulunamadı (muhtemelen zaten yoktu, sorun değil).")
+    return False
 
 
-def _open_reviews_tab(page):
-    """İşletme sayfasında 'Yorumlar' sekmesine/bağlantısına tıklamayı dener."""
+def _open_reviews_tab(page) -> bool:
+    """İşletme sayfasında 'Yorumlar' sekmesine/bağlantısına tıklamayı dener.
+    Birden fazla strateji sırayla denenir çünkü Google Haritalar düzeni
+    hesaba/bölgeye göre değişebiliyor."""
     patterns = [
         re.compile(r"yorum", re.IGNORECASE),
         re.compile(r"review", re.IGNORECASE),
         re.compile(r"değerlendirme", re.IGNORECASE),
     ]
+
+    # 1. deneme: role="tab"
     for pattern in patterns:
         try:
             tab = page.get_by_role("tab", name=pattern)
             if tab.count() > 0:
                 tab.first.click(timeout=5000)
                 page.wait_for_timeout(1500)
+                print(f"[maps_watch] 'Yorumlar' sekmesi (tab) bulundu ve tıklandı: /{pattern.pattern}/")
                 return True
         except Exception:
             continue
-    # Bazı düzenlerde yorum sayısı bir butona basılabilir metin olarak duruyor
+
+    # 2. deneme: role="button"
     for pattern in patterns:
         try:
             btn = page.get_by_role("button", name=pattern)
             if btn.count() > 0:
                 btn.first.click(timeout=5000)
                 page.wait_for_timeout(1500)
+                print(f"[maps_watch] 'Yorumlar' butonu bulundu ve tıklandı: /{pattern.pattern}/")
                 return True
         except Exception:
             continue
+
+    # 3. deneme: "12 yorum" gibi sayı+kelime içeren herhangi bir tıklanabilir öğe
+    try:
+        candidate = page.get_by_text(REVIEWS_LINK_RE).first
+        if candidate.count() if hasattr(candidate, "count") else True:
+            candidate.click(timeout=5000)
+            page.wait_for_timeout(1500)
+            print("[maps_watch] 'X yorum' metniyle eşleşen öğe bulundu ve tıklandı.")
+            return True
+    except Exception as exc:
+        print(f"[maps_watch] 'X yorum' metni denemesi başarısız: {exc}")
+
+    # 4. deneme: tam "Yorumlar" metnini taşıyan herhangi bir öğe (rol fark etmez)
+    try:
+        exact = page.get_by_text("Yorumlar", exact=True).first
+        if exact.count() if hasattr(exact, "count") else True:
+            exact.click(timeout=5000)
+            page.wait_for_timeout(1500)
+            print("[maps_watch] Tam 'Yorumlar' metni bulundu ve tıklandı.")
+            return True
+    except Exception as exc:
+        print(f"[maps_watch] Tam 'Yorumlar' metni denemesi başarısız: {exc}")
+
+    print("[maps_watch] 'Yorumlar' sekmesi HİÇBİR yöntemle bulunamadı.")
     return False
 
 
-def _sort_by_newest(page):
+def _sort_by_newest(page) -> bool:
     """Yorumları 'En yeni' sıraya almayı dener - başarısız olursa varsayılan
     sırayla (genelde 'En alakalı') devam edilir, önemli değil, sadece daha
     az verimli olur."""
@@ -96,9 +147,11 @@ def _sort_by_newest(page):
                     if option.count() > 0:
                         option.first.click(timeout=4000)
                         page.wait_for_timeout(1500)
+                        print("[maps_watch] Sıralama 'En yeni' olarak değiştirildi.")
                         return True
         except Exception:
             continue
+    print("[maps_watch] Sıralama değiştirilemedi, varsayılan sırayla devam ediliyor.")
     return False
 
 
@@ -115,6 +168,22 @@ def _extract_rating(card) -> int:
 
 
 def _extract_name(card) -> str:
+    # Gerçek Google Haritalar sayfasından incelenerek doğrulandı: yorum
+    # kartının dış div'inde aria-label doğrudan kullanıcının adını taşıyor
+    # (örn. aria-label="Ecmel Köylü") - bu inner_text ile ilk satırı almaktan
+    # çok daha güvenilir.
+    try:
+        aria_name = card.get_attribute("aria-label")
+        if aria_name and aria_name.strip():
+            return aria_name.strip()
+    except Exception:
+        pass
+    try:
+        name_el = card.locator(".d4r55").first
+        if name_el.count() > 0:
+            return name_el.inner_text().strip()
+    except Exception:
+        pass
     try:
         text = card.inner_text()
         first_line = text.strip().split("\n")[0].strip()
@@ -133,6 +202,7 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
     yolunun devam etmesini engellemeyecek şekilde ele alır.
     """
     if not maps_url:
+        print("[maps_watch] GOOGLE_MAPS_URL ayarlanmamış, bu adım atlanıyor.")
         return []
 
     results = []
@@ -154,22 +224,41 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                 ),
             )
             page = context.new_page()
+            print(f"[maps_watch] Sayfaya gidiliyor: {maps_url}")
             page.goto(maps_url, timeout=30000, wait_until="domcontentloaded")
-            page.wait_for_timeout(2500)
+
+            try:
+                page.wait_for_selector("h1", timeout=15000)
+            except Exception:
+                print("[maps_watch] UYARI: 15 sn içinde başlık (h1) yüklenmedi, devam ediliyor.")
+
+            page.wait_for_timeout(2000)
+            print(f"[maps_watch] Yönlendirilen adres: {page.url}")
+            print(f"[maps_watch] Sayfa başlığı: {page.title()}")
+            _shot(page, "1_initial")
+
             _accept_or_dismiss_consent(page)
+            page.wait_for_timeout(500)
+            _shot(page, "2_after_consent")
 
             opened = _open_reviews_tab(page)
+            _shot(page, "3_after_reviews_tab")
             if not opened:
-                print("[maps_watch] 'Yorumlar' sekmesi bulunamadı, sayfa yapısı değişmiş olabilir.")
+                print("[maps_watch] Yorumlar sekmesi açılamadığı için taramaya devam edilemiyor.")
+                browser.close()
+                return results
 
             _sort_by_newest(page)
+            _shot(page, "4_after_sort")
 
             # Yorum listesi kaydırılabilir bir alanda (role=feed) yükleniyor,
             # daha fazla yorum görmek için birkaç kez aşağı kaydırıyoruz.
             feed = page.locator('div[role="feed"]')
+            feed_count = feed.count()
+            print(f"[maps_watch] role=feed bulunan alan sayısı: {feed_count}")
             for _ in range(MAX_SCROLL_ATTEMPTS):
                 try:
-                    if feed.count() > 0:
+                    if feed_count > 0:
                         feed.first.evaluate("el => el.scrollBy(0, 800)")
                     else:
                         page.mouse.wheel(0, 800)
@@ -177,9 +266,27 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                 except Exception:
                     break
 
-            cards = page.locator("div[data-review-id]")
+            _shot(page, "5_after_scroll")
+
+            # Gerçek sayfa incelenerek doğrulandı: yorum kartının dış div'i
+            # "jftiEf" class'ını ve data-review-id özniteliğini birlikte
+            # taşıyor (data-review-id tek başına, aynı yorumun içindeki
+            # reviewerLink/actionMenu butonlarında da tekrarlandığı için
+            # tek başına yeterince spesifik değil).
+            cards = page.locator("div.jftiEf[data-review-id]")
             count = cards.count()
-            print(f"[maps_watch] {count} yorum kartı bulundu.")
+            print(f"[maps_watch] {count} yorum kartı bulundu (div.jftiEf[data-review-id] ile).")
+
+            if count == 0:
+                # Yedek deneme: class ismi değişmiş olabilir, sadece
+                # data-review-id'ye göre dene (daha az spesifik ama en
+                # azından teşhis için kaç aday öğe olduğunu görürüz).
+                fallback = page.locator("div[data-review-id]")
+                fb_count = fallback.count()
+                print(f"[maps_watch] Yedek arama: sadece data-review-id ile bulunan div sayısı: {fb_count}")
+                if fb_count > 0:
+                    cards = fallback
+                    count = fb_count
 
             for i in range(min(count, max_reviews)):
                 card = cards.nth(i)
@@ -195,6 +302,7 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                     "review_key": review_key.make_key(name, rating, business_name),
                 })
 
+            print(f"[maps_watch] Sonuç: {len(results)} yorum çıkarıldı.")
             browser.close()
     except Exception as exc:  # noqa: BLE001
         print(f"[maps_watch] Tarama sırasında hata (bu run için atlanıyor): {exc}")
