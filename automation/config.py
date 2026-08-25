@@ -64,7 +64,7 @@ class Config:
     BUSINESS_NAME = os.environ.get("BUSINESS_NAME", "İşletme Adınız")
     THANK_YOU_SUBTEXT = os.environ.get(
         "THANK_YOU_SUBTEXT",
-        "Değerli yorumun için çok teşekkür ederiz. Seni tekrar ağırlamak için sabırsızlanıyoruz!",
+        "Değerli yorumunuz için çok teşekkür ederiz. Sizi tekrar ağırlamak için sabırsızlanıyoruz!",
     )
     ACCENT_COLOR = os.environ.get("ACCENT_COLOR", "#9a4a2b")
     LOGO_PATH = os.environ.get("LOGO_PATH", "")

@@ -128,6 +128,12 @@ def fetch_new_reviews(gmail_address: str, app_password: str, already_processed: 
                 "message_id": message_id,
                 "reviewer_name": reviewer_name,
                 "rating": rating,
+                # Google'ın bildirim maili genelde yorumun tam metnini
+                # içermiyor (sadece "X yıldızlı yeni bir yorumunuz var"
+                # cümlesi) - bu yüzden burada boş bırakılıyor. Yorum metni
+                # asıl olarak maps_watch.py (Google Haritalar taraması)
+                # üzerinden geliyor.
+                "review_text": "",
                 "business": business_name,
                 "review_key": review_key.make_key(reviewer_name, rating, business_name),
             })

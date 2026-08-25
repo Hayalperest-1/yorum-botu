@@ -185,6 +185,33 @@ def _extract_rating(card) -> int:
     return 0
 
 
+def _extract_review_text(card) -> str:
+    """Yorumun yazılı metnini çıkarmayı dener. Google Maps'te yorum metni
+    genelde '.wiI7pd' class'lı bir span içinde oluyor (bilinen/yaygın bir
+    yapı ama bu hesapta DevTools ile doğrulanmadı) - bulunamazsa yedek
+    olarak kart içindeki en uzun satırı (isim/tarih gibi kısa satırları
+    eleyerek) yorum metni sayıyoruz."""
+    try:
+        el = card.locator(".wiI7pd").first
+        if el.count() > 0:
+            t = el.inner_text().strip()
+            if t:
+                return t
+    except Exception:
+        pass
+    try:
+        text = card.inner_text()
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        # İsim, tarih, "Yararlı" gibi kısa satırları ele - yorum metni
+        # genelde bunlardan belirgin şekilde daha uzun oluyor.
+        candidates = [l for l in lines if len(l) > 25]
+        if candidates:
+            return max(candidates, key=len)
+    except Exception:
+        pass
+    return ""
+
+
 def _extract_name(card) -> str:
     # Gerçek Google Haritalar sayfasından incelenerek doğrulandı: yorum
     # kartının dış div'inde aria-label doğrudan kullanıcının adını taşıyor
@@ -310,12 +337,14 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                 card = cards.nth(i)
                 name = _extract_name(card)
                 rating = _extract_rating(card)
+                review_text = _extract_review_text(card)
                 if not name:
                     continue
                 results.append({
                     "source": "maps",
                     "reviewer_name": name,
                     "rating": rating,
+                    "review_text": review_text,
                     "business": business_name,
                     "review_key": review_key.make_key(name, rating, business_name),
                 })

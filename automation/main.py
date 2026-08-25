@@ -34,13 +34,18 @@ from dotenv import load_dotenv
 # okuyor.
 load_dotenv()
 
+import os
+
 from automation.config import Config
 from automation.instagram import InstagramClient
 from automation import template_queue
 from automation import state_store
 from automation import gmail_watch
 from automation import maps_watch
-from automation.git_publish import raw_url_for
+from automation import image_gen
+from automation.git_publish import raw_url_for, commit_and_push
+
+GENERATED_DIR = "assets/generated"
 
 
 def _collect_new_reviews(cfg, processed_message_ids: set, processed_review_keys: set):
@@ -118,11 +123,40 @@ def main():
         try:
             if rating >= cfg.MIN_RATING_TO_POST:
                 template = template_queue.get_template_at(next_template_index)
-                media_url = raw_url_for(template["path"], cfg.GITHUB_REPOSITORY)
-
                 print(f"Sıradaki şablon: {template['filename']} ({template['index'] + 1}/{template['total']})")
 
-                media_id = ig.post_story(media_url, is_video=(template["type"] == "video"))
+                if template["type"] == "image":
+                    # Görsel şablonun üzerine isim + yıldız + yorum metni +
+                    # teşekkür mesajını yazıp yeni bir dosya olarak
+                    # üretiyoruz. Instagram bu dosyayı internetten kendisi
+                    # indireceği için, önce depoya commit'leyip PUSH'lamamız
+                    # gerekiyor (push tamamlanmadan raw.githubusercontent.com
+                    # adresi çalışmaz) - bu yüzden burada state.json'dan
+                    # BAĞIMSIZ, ayrı bir commit atılıyor.
+                    safe_key = "".join(c for c in review["review_key"] if c.isalnum())[:16]
+                    output_path = os.path.join(GENERATED_DIR, f"{safe_key}.jpg")
+                    image_gen.generate_story_image(
+                        template_path=template["path"],
+                        reviewer_name=reviewer_name,
+                        rating=rating,
+                        review_text=review.get("review_text", ""),
+                        thank_you_text=cfg.THANK_YOU_SUBTEXT,
+                        output_path=output_path,
+                    )
+                    commit_and_push(
+                        [output_path],
+                        f"generated: {reviewer_name} icin hikaye gorseli",
+                    )
+                    media_url = raw_url_for(output_path, cfg.GITHUB_REPOSITORY)
+                    is_video = False
+                else:
+                    # Video şablonların üzerine otomatik yazı ekleme
+                    # (ffmpeg/moviepy gerektirir) henüz yapılmıyor - video
+                    # olduğu gibi paylaşılır.
+                    media_url = raw_url_for(template["path"], cfg.GITHUB_REPOSITORY)
+                    is_video = True
+
+                media_id = ig.post_story(media_url, is_video=is_video)
                 print(f"Instagram hikayesine paylaşıldı: {media_id}")
 
                 next_template_index = template["index"] + 1
