@@ -66,63 +66,81 @@ def _accept_or_dismiss_consent(page) -> bool:
     return False
 
 
+def _reviews_panel_visible(page) -> bool:
+    """Yorumlar paneli gerçekten açıldı mı diye kontrol eder (tıklanan öğe
+    yanlış bir şeyse - ör. 'Yorum yaz' butonu - bunu yakalamak için)."""
+    try:
+        if page.locator('div.jftiEf[data-review-id]').count() > 0:
+            return True
+        if page.locator('div[role="feed"]').count() > 0:
+            return True
+        if page.get_by_role("button", name=re.compile(r"sırala|sort", re.IGNORECASE)).count() > 0:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _open_reviews_tab(page) -> bool:
     """İşletme sayfasında 'Yorumlar' sekmesine/bağlantısına tıklamayı dener.
     Birden fazla strateji sırayla denenir çünkü Google Haritalar düzeni
-    hesaba/bölgeye göre değişebiliyor."""
+    hesaba/bölgeye göre değişebiliyor. Her tıklamadan sonra gerçekten
+    yorumlar paneli açıldı mı diye DOĞRULUYORUZ - çünkü gevşek metin
+    eşleşmeleri ("yorum" geçen herhangi bir buton) yanlışlıkla 'Yorum yaz'
+    gibi alakasız bir butona tıklayabilir; bu durumda bir sonraki
+    stratejiye geçiyoruz (Escape ile olası bir diyaloğu kapatıp)."""
     patterns = [
         re.compile(r"yorum", re.IGNORECASE),
         re.compile(r"review", re.IGNORECASE),
         re.compile(r"değerlendirme", re.IGNORECASE),
     ]
 
-    # 1. deneme: role="tab"
-    for pattern in patterns:
+    def _attempt(get_locator, label) -> bool:
         try:
-            tab = page.get_by_role("tab", name=pattern)
-            if tab.count() > 0:
-                tab.first.click(timeout=5000)
+            loc = get_locator()
+            has_match = loc.count() if hasattr(loc, "count") else 0
+            if has_match:
+                loc.first.click(timeout=5000)
                 page.wait_for_timeout(1500)
-                print(f"[maps_watch] 'Yorumlar' sekmesi (tab) bulundu ve tıklandı: /{pattern.pattern}/")
-                return True
-        except Exception:
-            continue
+                if _reviews_panel_visible(page):
+                    print(f"[maps_watch] Yorumlar paneli açıldı: {label}")
+                    return True
+                print(f"[maps_watch] '{label}' tıklandı ama yorumlar paneli görünmedi, başka yöntem deneniyor.")
+                try:
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
+        except Exception as exc:
+            print(f"[maps_watch] '{label}' denemesi başarısız: {exc}")
+        return False
 
-    # 2. deneme: role="button"
+    # 1. deneme: role="tab" (en güvenilir - üstteki Genel bakış/Yorumlar/Hakkında sekmeleri)
     for pattern in patterns:
-        try:
-            btn = page.get_by_role("button", name=pattern)
-            if btn.count() > 0:
-                btn.first.click(timeout=5000)
-                page.wait_for_timeout(1500)
-                print(f"[maps_watch] 'Yorumlar' butonu bulundu ve tıklandı: /{pattern.pattern}/")
-                return True
-        except Exception:
-            continue
-
-    # 3. deneme: "12 yorum" gibi sayı+kelime içeren herhangi bir tıklanabilir öğe
-    try:
-        candidate = page.get_by_text(REVIEWS_LINK_RE).first
-        if candidate.count() if hasattr(candidate, "count") else True:
-            candidate.click(timeout=5000)
-            page.wait_for_timeout(1500)
-            print("[maps_watch] 'X yorum' metniyle eşleşen öğe bulundu ve tıklandı.")
+        if _attempt(lambda p=pattern: page.get_by_role("tab", name=p), f"tab /{pattern.pattern}/"):
             return True
-    except Exception as exc:
-        print(f"[maps_watch] 'X yorum' metni denemesi başarısız: {exc}")
 
-    # 4. deneme: tam "Yorumlar" metnini taşıyan herhangi bir öğe (rol fark etmez)
-    try:
-        exact = page.get_by_text("Yorumlar", exact=True).first
-        if exact.count() if hasattr(exact, "count") else True:
-            exact.click(timeout=5000)
-            page.wait_for_timeout(1500)
-            print("[maps_watch] Tam 'Yorumlar' metni bulundu ve tıklandı.")
+    # 2. deneme: "4,9 yıldız, 128 yorum" gibi sayı+"yorum" içeren tıklanabilir öğe
+    # (bu, işletme adının hemen altındaki yıldız/yorum-sayısı özetidir ve
+    # tıklanınca doğrudan yorumlar paneline geçer - genelde en güvenilir 2.
+    # seçenek, "Yorum yaz" gibi alakasız butonlarla karışmaz çünkü rakam içerir)
+    if _attempt(lambda: page.get_by_role("button", name=REVIEWS_LINK_RE), "sayı+yorum (button)"):
+        return True
+    if _attempt(lambda: page.get_by_text(REVIEWS_LINK_RE), "sayı+yorum (metin)"):
+        return True
+
+    # 3. deneme: tam "Yorumlar" metnini taşıyan herhangi bir öğe (rol fark etmez)
+    if _attempt(lambda: page.get_by_text("Yorumlar", exact=True), "tam 'Yorumlar' metni"):
+        return True
+
+    # 4. deneme (son çare - en riskli): "yorum" geçen herhangi bir buton.
+    # Bu "Yorum yaz" gibi alakasız butonlara da tıklayabilir, bu yüzden en
+    # sona bırakıldı ve yine de _reviews_panel_visible ile doğrulanıyor.
+    for pattern in patterns:
+        if _attempt(lambda p=pattern: page.get_by_role("button", name=p), f"gevşek buton /{pattern.pattern}/"):
             return True
-    except Exception as exc:
-        print(f"[maps_watch] Tam 'Yorumlar' metni denemesi başarısız: {exc}")
 
-    print("[maps_watch] 'Yorumlar' sekmesi HİÇBİR yöntemle bulunamadı.")
+    print("[maps_watch] 'Yorumlar' sekmesi HİÇBİR yöntemle bulunamadı (veya tıklanan öğe doğru paneli açmadı).")
     return False
 
 
