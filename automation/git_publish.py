@@ -45,7 +45,18 @@ def commit_and_push(paths: list, message: str) -> None:
     subprocess.run(["git", "add", *paths], check=True)
 
     result = subprocess.run(["git", "commit", "-m", message], capture_output=True, text=True)
-    if result.returncode != 0 and "nothing to commit" not in result.stdout:
+    # Git, "hiçbir şey stage edilmedi" durumunu duruma göre İKİ FARKLI
+    # metinle bildiriyor: "nothing to commit, working tree clean" (çalışma
+    # ağacında hiç değişiklik/yeni dosya yokken) VEYA "nothing added to
+    # commit but untracked files present" (başka, alakasız izlenmeyen
+    # dosyalar - ör. debug_screenshots/ - varken). İkisi de aslında AYNI
+    # ZARARSIZ durum: verdiğimiz dosyanın içeriği zaten commit'lenmiş
+    # olanla birebir aynı (ör. aynı yoruma ait görsel daha önce zaten
+    # üretilip push'lanmış) - eskiden sadece ilk metni tanıyorduk, ikinci
+    # metin geldiğinde gereksiz yere hata fırlatıp o yorumu sonsuza kadar
+    # başarısız gösteriyorduk.
+    nothing_staged_markers = ("nothing to commit", "nothing added to commit")
+    if result.returncode != 0 and not any(m in result.stdout for m in nothing_staged_markers):
         raise RuntimeError(f"git commit başarısız: {result.stdout}\n{result.stderr}")
 
     max_attempts = 5

@@ -31,6 +31,7 @@ yanıtlamak hâlâ elle yapman gereken bir adım.
 """
 
 import sys
+import time
 
 from dotenv import load_dotenv
 
@@ -146,6 +147,14 @@ def _post_review_to_instagram(review, cfg, ig, next_template_index):
         media_id = ig.post_story(media_url, is_video=is_video)
         print(f"Instagram hikayesine paylaşıldı: {media_id}")
         next_template_index = template["index"] + 1
+
+        # Art arda çok hızlı (aralıksız) paylaşım isteği göndermek Meta'nın
+        # kötüye kullanım/istismar korumasını tetikleyip "API access
+        # blocked" hatası verdirebiliyor (bir çalıştırmada birden fazla
+        # bekleyen yorum aynı anda paylaşılırken yaşandı). Her başarılı
+        # paylaşımdan sonra kısa bir süre bekleyerek isteklerin arasını
+        # açıyoruz.
+        time.sleep(8)
     else:
         print(f"Puan {rating}, {cfg.MIN_RATING_TO_POST} altında (ya da okunamadı) -> hikayeye paylaşılmadı.")
 
@@ -181,6 +190,18 @@ def main():
     newly_processed_message_ids = []
     newly_processed_review_keys = []
     processed = 0
+
+    # ÖNEMLİ: bu sayaç, önceki sürümdeki "processed" (SADECE BAŞARILI
+    # paylaşımları sayan) sayacının aksine, Instagram'a paylaşım için
+    # yapılan HER DENEMEYİ (başarılı ya da başarısız fark etmez) sayar.
+    # Eskiden "processed" kullanıldığı için, bir çalıştırmada art arda
+    # hatalar oluştuğunda (ör. "API access blocked") limit HİÇ dolmuyor,
+    # bot elindeki TÜM birikmiş yorumları (ör. 10 tanesini) art arda,
+    # duraksamadan denemeye devam ediyordu - bu da muhtemelen Meta'nın
+    # kötüye kullanım korumasını tetikleyen "burst" (patlama halinde
+    # istek) durumuna yol açtı. Artık limit, denemelerin SAYISINA göre
+    # duruyor.
+    attempts_this_run = 0
     state_changed = False
 
     # Bu run'da "görülen" (ele alınan) review_key'ler - aşağıdaki pending
@@ -190,7 +211,7 @@ def main():
     touched_this_run = set()
 
     for review in reviews:
-        if processed >= cfg.MAX_REVIEWS_PER_RUN:
+        if attempts_this_run >= cfg.MAX_REVIEWS_PER_RUN:
             print("Bu çalıştırma için işlem limiti doldu, kalanlar bir sonraki çalıştırmada işlenecek.")
             break
 
@@ -234,6 +255,7 @@ def main():
             pending_reviews.pop(review_key_val, None)
             state_changed = True
 
+        attempts_this_run += 1
         try:
             _, next_template_index = _post_review_to_instagram(review, cfg, _get_ig(), next_template_index)
 
@@ -260,7 +282,7 @@ def main():
     for review_key_val, info in list(pending_reviews.items()):
         if review_key_val in touched_this_run:
             continue  # bu run'da zaten normal akışta ele alındı
-        if processed >= cfg.MAX_REVIEWS_PER_RUN:
+        if attempts_this_run >= cfg.MAX_REVIEWS_PER_RUN:
             print("İşlem limiti doldu, bekleyen yorumların yaşlandırılması bir sonraki çalıştırmaya kaldı.")
             break
 
@@ -286,6 +308,7 @@ def main():
             "review_text": "",
             "source": "pending-timeout",
         }
+        attempts_this_run += 1
         try:
             _, next_template_index = _post_review_to_instagram(synthetic_review, cfg, _get_ig(), next_template_index)
             newly_processed_review_keys.append(review_key_val)
