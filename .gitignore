@@ -3,3 +3,9 @@ client_secret.json
 __pycache__/
 *.pyc
 .venv/
+
+# Google oturum çerezleri - şifre kadar hassas, ASLA depoya commit'lenmemeli.
+# tools/save_google_session.py veya tools/convert_cookies.py ile üretilir,
+# içeriği GitHub'a sadece "GOOGLE_STORAGE_STATE" secret'ı olarak elle girilir.
+tools/google_session.json
+tools/cookies_export.json

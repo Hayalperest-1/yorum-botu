@@ -45,6 +45,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           REVIEW_SOURCE_BUSINESS_NAME: ${{ vars.REVIEW_SOURCE_BUSINESS_NAME }}
           GOOGLE_MAPS_URL: ${{ vars.GOOGLE_MAPS_URL }}
+          GOOGLE_STORAGE_STATE: ${{ secrets.GOOGLE_STORAGE_STATE }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}

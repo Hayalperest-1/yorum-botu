@@ -22,6 +22,7 @@ review_key, iki kaynaktan (Gmail + Haritalar) aynı yorum gelirse ikinci
 kez paylaşılmasını önlemek için review_key.py ile üretiliyor.
 """
 
+import json
 import os
 import re
 
@@ -291,12 +292,22 @@ def _extract_name(card) -> str:
     return ""
 
 
-def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int = 10):
+def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int = 10,
+                             storage_state: str = ""):
     """
     Dönüş: [{"source": "maps", "reviewer_name", "rating", "business", "review_key"}, ...]
     Herhangi bir adım başarısız olursa (Google sayfa yapısını değiştirdiyse,
     ağ sorunu vs.) boş liste döner - çağıran taraf (main.py) bunu Gmail
     yolunun devam etmesini engellemeyecek şekilde ele alır.
+
+    storage_state: Config.GOOGLE_STORAGE_STATE - bir Google hesabının
+    kaydedilmiş oturum durumu (Playwright storage_state formatında JSON
+    metni). KESİN OLARAK GEREKLİ: 2026-08'de teşhis edildiği üzere, Google
+    Haritalar OTURUM AÇILMAMIŞ tarayıcılara işletme sayfasının Genel Bakış/
+    Yorumlar/Hakkında sekme çubuğu OLMAYAN "sınırlı görünüm"ünü gönderiyor
+    (headless olup olmaması fark etmiyor, sadece oturum durumu önemli) - bu
+    yüzden bu boşsa Yorumlar sekmesi büyük ihtimalle hiç bulunamayacak.
+    Kurulum için tools/save_google_session.py'ye bak.
     """
     if not maps_url:
         print("[maps_watch] GOOGLE_MAPS_URL ayarlanmamış, bu adım atlanıyor.")
@@ -309,18 +320,13 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
         print("[maps_watch] playwright kurulu değil, bu adım atlanıyor.")
         return []
 
+    if not storage_state:
+        print("[maps_watch] UYARI: GOOGLE_STORAGE_STATE ayarlanmamış - Google Haritalar "
+              "muhtemelen 'sınırlı görünüm' gösterecek ve Yorumlar sekmesi bulunamayacak. "
+              "Kurulum için tools/save_google_session.py'yi çalıştır.")
+
     try:
         with sync_playwright() as p:
-            # ÖNEMLİ (2026-08'de teşhis edildi): headless=True ile Google
-            # Haritalar bu botu "gerçek" bir tarayıcı olarak tanımıyor ve
-            # sayfanın YORUMLAR SEKMESİ DAHİL HİÇBİR SEKME İÇERMEYEN
-            # "sınırlı görünüm" (kısıtlı, sadece "Yorum yazın" butonu olan,
-            # tıklanabilir sekme çubuğu OLMAYAN) sürümünü gönderiyor - bu
-            # yüzden hangi selector'ı denersek deneyelim sekme hiç
-            # bulunamıyordu (DOM'da gerçekten yoktu). Çözüm: tarayıcıyı
-            # headless=False ile (workflow'da xvfb sanal ekranı altında)
-            # çalıştırıp, otomasyon izlerini (navigator.webdriver vb.)
-            # gizleyerek Google'a normal bir kullanıcı gibi görünmek.
             browser = p.chromium.launch(
                 headless=False,
                 args=[
@@ -328,7 +334,7 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                     "--no-sandbox",
                 ],
             )
-            context = browser.new_context(
+            context_kwargs = dict(
                 locale="tr-TR",
                 viewport={"width": 1366, "height": 900},
                 user_agent=(
@@ -336,10 +342,20 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
+            if storage_state:
+                # storage_state Playwright'a hem dosya yolu hem de python
+                # dict/JSON-string olarak verilebilir; burada elimizde
+                # doğrudan JSON METNİ var (secret olarak öyle geldi), o
+                # yüzden önce dict'e çeviriyoruz.
+                try:
+                    context_kwargs["storage_state"] = json.loads(storage_state)
+                except Exception as exc:
+                    print(f"[maps_watch] UYARI: GOOGLE_STORAGE_STATE JSON olarak okunamadı "
+                          f"({exc}), oturumsuz devam ediliyor.")
+            context = browser.new_context(**context_kwargs)
             # navigator.webdriver=true bayrağı otomasyonu ele veren en
-            # bilinen işaretlerden biri - Google dahil pek çok site buna
-            # bakıp "sınırlı/basit" mod sunuyor. Her yeni sayfada bu
-            # bayrağı gizliyoruz.
+            # bilinen işaretlerden biri - her yeni sayfada gizliyoruz
+            # (zararı yok, oturumla birlikte ekstra bir güvenlik katmanı).
             context.add_init_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
             )

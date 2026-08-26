@@ -73,6 +73,7 @@ def _collect_new_reviews(cfg, processed_message_ids: set, processed_review_keys:
         maps_reviews = maps_watch.fetch_reviews_from_maps(
             maps_url=cfg.GOOGLE_MAPS_URL,
             business_name=cfg.REVIEW_SOURCE_BUSINESS_NAME or "İşletme",
+            storage_state=cfg.GOOGLE_STORAGE_STATE,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"[main] Haritalar taraması beklenmedik şekilde hata verdi, atlanıyor: {exc}", file=sys.stderr)

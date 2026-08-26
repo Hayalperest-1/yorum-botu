@@ -37,6 +37,17 @@ class Config:
     # yolu çalışır). automation/maps_watch.py içinde detaylı açıklama var.
     GOOGLE_MAPS_URL = os.environ.get("GOOGLE_MAPS_URL", "")
 
+    # Google, giriş yapılmamış (oturumsuz) tarayıcılara işletme sayfasının
+    # Yorumlar sekmesi dahil sekme çubuğu OLMAYAN "sınırlı görünüm"ünü
+    # gösteriyor (2026-08'de teşhis edildi) - bu yüzden bir Google
+    # hesabının OTURUM DURUMUNU (çerezlerini) tools/save_google_session.py
+    # ile bir kere kaydedip buraya (GOOGLE_STORAGE_STATE secret'ı olarak)
+    # koymak GEREKİYOR, yoksa Haritalar taraması hiç çalışmaz. JSON
+    # içeriğinin TAMAMI (Playwright'ın storage_state formatı) buraya gelir.
+    # Boşsa maps_watch.py oturumsuz denemeye devam eder (yine sınırlı
+    # görünüme takılır).
+    GOOGLE_STORAGE_STATE = os.environ.get("GOOGLE_STORAGE_STATE", "")
+
     # --- Instagram / Meta Graph API ---
     IG_ACCESS_TOKEN = _require("IG_ACCESS_TOKEN")
     IG_USER_ID = _require("IG_USER_ID")
