@@ -3,8 +3,17 @@ name: Google Yorum -> Instagram Hikaye Botu
 on:
   schedule:
     # UTC saatine göre çalışır; her 15 dakikada bir tetiklenir.
-    # (GitHub bazen birkaç dakika gecikmeli tetikleyebilir, normaldir.)
+    # NOT: GitHub'ın kendi "schedule" tetikleyicisi resmi olarak "best
+    # effort" - yoğun saatlerde 20-60 dk gecikebiliyor, hatta bazen hiç
+    # tetiklenmeyebiliyor. Bu yüzden aşağıya, DIŞARIDAN (örn. cron-job.org)
+    # her 15 dakikada bir çağrılacak "repository_dispatch" tetikleyicisini
+    # de ekledik - bu ikisi birlikte çalışır, ikisi de aynı işi tetikler,
+    # aynı anda ikisi de ateşlerse "concurrency" ayarı (aşağıda) ve
+    # git_publish.py'deki push-retry mantığı çakışmayı zaten güvenle
+    # yönetiyor.
     - cron: "*/15 * * * *"
+  repository_dispatch:
+    types: [run-story-bot]  # dışarıdaki sayaç servisi bu event_type ile tetikler
   workflow_dispatch: {}  # Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
 
 permissions:

@@ -115,6 +115,30 @@ def _open_reviews_tab(page) -> bool:
             print(f"[maps_watch] '{label}' denemesi başarısız: {exc}")
         return False
 
+    # 0. deneme (EN GÜVENİLİR - gerçek DOM'dan DevTools ile doğrulandı,
+    # 2026-08): üstteki sekme çubuğu <div role="tablist" class="RWPxGd">
+    # içinde 3 <button role="tab"> var (Genel bakış / Yorumlar / Hakkında),
+    # her birinin içinde görünen metni taşıyan bir "Gpq6kf" class'lı div
+    # var (örn. içeriği tam olarak "Yorumlar"). aria-label tabanlı eşleşme
+    # (aşağıdaki 1. deneme) teoride de tutması gerekirken headless
+    # çalıştırmalarda tutarlı şekilde başarısız oluyordu - muhtemelen
+    # erişilebilirlik ismi tam hesaplanmadan tıklanmaya çalışılıyordu; bu
+    # yüzden burada DOĞRUDAN görünen metne (yapısal olarak) bakıyoruz.
+    if _attempt(
+        lambda: page.locator('div[role="tablist"] button[role="tab"]').filter(has_text="Yorumlar"),
+        "tablist > button[role=tab] (metin='Yorumlar', doğrulanmış)",
+    ):
+        return True
+    # 0b. deneme: aynı yapı ama konum bazlı (Yorumlar sekmesi doğrulanan
+    # DOM'da data-tab-index="1" - Genel bakış=0, Yorumlar=1, Hakkında=2).
+    # Sadece 0/0b metinle bulunamazsa devreye girer, metin eşleşmesi kırılırsa
+    # (örn. Google metni değiştirirse) yine de bir şans daha verir.
+    if _attempt(
+        lambda: page.locator('div[role="tablist"] button[role="tab"][data-tab-index="1"]'),
+        "tablist > button[data-tab-index=1] (konum bazlı)",
+    ):
+        return True
+
     # 1. deneme: role="tab" (en güvenilir - üstteki Genel bakış/Yorumlar/Hakkında sekmeleri)
     for pattern in patterns:
         if _attempt(lambda p=pattern: page.get_by_role("tab", name=p), f"tab /{pattern.pattern}/"):
@@ -146,15 +170,39 @@ def _open_reviews_tab(page) -> bool:
 
 def _sort_by_newest(page) -> bool:
     """Yorumları 'En yeni' sıraya almayı dener - başarısız olursa varsayılan
-    sırayla (genelde 'En alakalı') devam edilir, önemli değil, sadece daha
-    az verimli olur."""
+    sırayla devam edilir, önemli değil, sadece daha az verimli olur.
+
+    NOT (2026-08, gerçek DOM dump'ı ile doğrulandı): sıralama butonunun
+    kendi metni/aria-label'ı "Sırala"/"Sort" DEĞİL, o an SEÇİLİ OLAN
+    değerin kendisi (örn. aria-label="En yeni", class="HQzyZ",
+    aria-haspopup="true"). Yani "sırala" kelimesini arayan eski mantık,
+    sıralama zaten 'En yeni' ise (ki bu işletmede varsayılan öyle
+    görünüyor) hep 'bulunamadı' diyip aslında zararsız bir şekilde
+    başarısız oluyordu. Önce buton zaten 'en yeni' diyorsa hiç
+    tıklamadan başarılı sayıyoruz; değilse tıklayıp menüden seçiyoruz."""
+    try:
+        already = page.get_by_role("button", name=re.compile(r"en yeni", re.IGNORECASE))
+        if already.count() > 0:
+            print("[maps_watch] Sıralama zaten 'En yeni' (ekstra tıklama gerekmedi).")
+            return True
+    except Exception:
+        pass
+
     sort_names = [
         re.compile(r"sırala", re.IGNORECASE),
         re.compile(r"sort", re.IGNORECASE),
     ]
+    candidates = []
     for pattern in sort_names:
+        candidates.append(lambda p=pattern: page.get_by_role("button", name=p))
+    # Gerçek DOM'da doğrulanan class - metin/aria-label'ı değişse bile
+    # (farklı işletme/dil, farklı A/B varyantı) bu class genelde sabit
+    # kalıyor.
+    candidates.append(lambda: page.locator('button.HQzyZ[aria-haspopup="true"]'))
+
+    for get_locator in candidates:
         try:
-            btn = page.get_by_role("button", name=pattern)
+            btn = get_locator()
             if btn.count() > 0:
                 btn.first.click(timeout=4000)
                 page.wait_for_timeout(800)
@@ -167,9 +215,13 @@ def _sort_by_newest(page) -> bool:
                         page.wait_for_timeout(1500)
                         print("[maps_watch] Sıralama 'En yeni' olarak değiştirildi.")
                         return True
+                try:
+                    page.keyboard.press("Escape")
+                except Exception:
+                    pass
         except Exception:
             continue
-    print("[maps_watch] Sıralama değiştirilemedi, varsayılan sırayla devam ediliyor.")
+    print("[maps_watch] Sıralama değiştirilemedi, varsayılan sırayla devam ediliyor (kritik değil).")
     return False
 
 
@@ -285,6 +337,16 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
             _accept_or_dismiss_consent(page)
             page.wait_for_timeout(500)
             _shot(page, "2_after_consent")
+
+            # Sekme çubuğu (Genel bakış / Yorumlar / Hakkında) JS ile geç
+            # render olabiliyor - tıklamayı denemeden önce DOM'da gerçekten
+            # oluşmasını bekliyoruz (aksi halde 0 eşleşme bulup gereksiz yere
+            # yedek/gevşek stratejilere düşüyorduk).
+            try:
+                page.wait_for_selector('div[role="tablist"] button[role="tab"]', timeout=12000)
+                print("[maps_watch] Sekme çubuğu (tablist) DOM'da bulundu.")
+            except Exception:
+                print("[maps_watch] UYARI: 12 sn içinde sekme çubuğu (tablist) görünmedi, yine de denenecek.")
 
             # 'Yorumlar' sekmesini açma bazen ilk denemede başarısız oluyor
             # - muhtemelen sayfa/JS tam hydrate olmadan tıklamayı deniyoruz.
