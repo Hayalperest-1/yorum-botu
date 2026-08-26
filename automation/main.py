@@ -10,7 +10,11 @@ Ana akış - bu dosya her tetiklendiğinde (15 dakikada bir, GitHub Actions
         bildirim mailleri (gmail_watch.py) - Haritalar taraması bir
         şekilde başarısız olursa ya da devre dışıysa yedek/tamamlayıcı.
      İki kaynaktan da aynı yorum gelirse (review_key eşleşirse) SADECE
-     BİR KERE işlenir, iki kere paylaşılmaz.
+     BİR KERE işlenir, iki kere paylaşılmaz. Haritalar tarafında ayrıca
+     TARİH FİLTRESİ var (bkz. maps_watch.py): sadece BUGÜN yapılmış
+     yorumlar alınır, "3 gün önce" gibi eski/backlog yorumlar hiç
+     toplanmaz - böylece günler önce yapılmış bir yorum sanki bugün
+     gelmiş gibi paylaşılmaz.
   2) Puanı yeterince yüksekse (varsayılan 4+): assets/story-templates/
      klasöründeki hazır görsel/video havuzundan SIRADAKİ dosyayı al,
      Instagram hikayesine olduğu gibi paylaş, sırayı bir ilerlet
@@ -22,8 +26,17 @@ Ana akış - bu dosya her tetiklendiğinde (15 dakikada bir, GitHub Actions
      Gmail maili "işlendi" sayılıp bir daha hiç taranmadığı, Haritalar da
      bulamadığı durumda o yorum sonsuza kadar beklemede takılı kalıyordu.
   4) İşlenen her yorumun kimliğini (review_key, ve varsa Gmail
-     message_id) state.json'a ekle (bir daha "yeni" sayılmasın diye) ve
-     tek seferde depoya kaydet
+     message_id) state.json'a ekler - ÖNEMLİ: bunu artık run'un sonunda
+     TEK SEFERDE değil, HER paylaşımdan/duruma göre değişiklikten HEMEN
+     SONRA, tek tek yapıyoruz (bkz. _persist). Eskiden tüm run'un
+     state'i en sonda bir kerede kaydediliyordu; bu son kayıt herhangi
+     bir sebeple (git push çakışması, ağ hatası, runner'ın kesilmesi
+     vb.) başarısız olursa, o run içinde Instagram'a BAŞARIYLA
+     paylaşılmış yorumlar bile "işlendi" diye işaretlenemiyor, bir
+     sonraki çalıştırma onları TEKRAR paylaşıyordu (mükerrer paylaşımın
+     tespit edilen asıl sebebi buydu). Artık her adımdan hemen sonra
+     ayrı ayrı kaydedildiği için, bir kayıt başarısız olsa bile en fazla
+     O TEK adım kaybolur, önceki paylaşımlar güvende kalır.
 
 NOT: Bu akış Google'a OTOMATİK yanıt yazmıyor (Business Profile API'nin
 kısıtlı/onaylı erişimi olmadan bu mümkün değil) - yorumu Google üzerinden
@@ -161,6 +174,32 @@ def _post_review_to_instagram(review, cfg, ig, next_template_index):
     return True, next_template_index
 
 
+def _persist(processed_message_ids, processed_review_keys, pending_reviews, next_template_index, note):
+    """Anlık durumu HEMEN diske yazıp commit'ler - tüm run bitene kadar
+    BEKLEMEZ. Bkz. dosyanın en üstündeki not (madde 4): eskiden tek bir
+    toplu kayıt vardı, o başarısız olunca zaten yapılmış paylaşımlar
+    "unutulup" bir sonraki run'da TEKRAR paylaşılıyordu. Artık her önemli
+    adımdan (özellikle her başarılı Instagram paylaşımından) hemen sonra
+    ayrı ayrı çağrılıyor - biri başarısız olsa bile öncekiler güvende.
+
+    Kaydetme başarısız olursa hatayı YUTAR (fırlatmaz) - amaç, tek bir
+    kayıt hatasının o run'daki DİĞER yorumların işlenmesini durdurmaması;
+    ama bunu logda AÇIKÇA uyarı olarak basıyoruz ki fark edilsin."""
+    state = {
+        "next_template_index": next_template_index,
+        "processed_message_ids": list(processed_message_ids),
+        "processed_review_keys": list(processed_review_keys),
+        "pending_reviews": pending_reviews,
+    }
+    try:
+        state_store.save_and_commit(state, commit_message=f"state: {note}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[main] UYARI: state.json kaydedilemedi ({note}): {exc}", file=sys.stderr)
+        print("[main] Bu tek adım commit'lenemedi - eğer bu bir paylaşım sonrasıysa, "
+              "state kaydı tutmadığı için bir sonraki çalıştırmada AYNI yorum tekrar "
+              "paylaşılabilir. Bu logu görürsen bana bildir.", file=sys.stderr)
+
+
 def main():
     cfg = Config
 
@@ -187,8 +226,6 @@ def main():
         return ig
 
     next_template_index = state.get("next_template_index", 0)
-    newly_processed_message_ids = []
-    newly_processed_review_keys = []
     processed = 0
 
     # ÖNEMLİ: bu sayaç, önceki sürümdeki "processed" (SADECE BAŞARILI
@@ -202,7 +239,6 @@ def main():
     # istek) durumuna yol açtı. Artık limit, denemelerin SAYISINA göre
     # duruyor.
     attempts_this_run = 0
-    state_changed = False
 
     # Bu run'da "görülen" (ele alınan) review_key'ler - aşağıdaki pending
     # yaşlandırma adımında bunları BİR DAHA sayaç ilerletmemek için
@@ -241,29 +277,37 @@ def main():
                 # dolunca aşağıdaki "pending yaşlandırma" adımıyla
                 # işlenecek - Gmail'den bir daha HİÇ görünmese bile).
                 if review.get("source") == "gmail" and review.get("message_id"):
-                    newly_processed_message_ids.append(review["message_id"])
-                state_changed = True
+                    processed_message_ids.add(review["message_id"])
+                _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                         next_template_index, f"{reviewer_name} beklemede (deneme {attempts})")
                 continue
             else:
                 print(f"  -> {MAX_TEXT_WAIT_ATTEMPTS} denemede de yorum metni bulunamadı, "
                       f"metin OLMADAN paylaşılıyor.")
                 pending_reviews.pop(review_key_val, None)
-                state_changed = True
+                _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                         next_template_index, f"{reviewer_name} bekleme suresi doldu")
         elif review_key_val in pending_reviews:
             # Bekleyen bir yorumun metni artık bulundu (harita taraması
             # başarılı oldu) - beklemeden çık.
             pending_reviews.pop(review_key_val, None)
-            state_changed = True
+            _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                     next_template_index, f"{reviewer_name} metni bulundu, beklemeden cikti")
 
         attempts_this_run += 1
         try:
             _, next_template_index = _post_review_to_instagram(review, cfg, _get_ig(), next_template_index)
 
-            newly_processed_review_keys.append(review["review_key"])
+            processed_review_keys.add(review["review_key"])
             if review.get("source") == "gmail" and review.get("message_id"):
-                newly_processed_message_ids.append(review["message_id"])
-            state_changed = True
+                processed_message_ids.add(review["message_id"])
             processed += 1
+
+            # KRİTİK: paylaşım başarılı olur olmaz HEMEN kaydet - bu run'da
+            # sıradaki yorumun işlenmesi sırasında bir şey ters giderse
+            # (hata, runner zaman aşımı vb.) bu paylaşım "unutulmasın".
+            _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                     next_template_index, f"{reviewer_name} paylasildi")
 
         except Exception as exc:  # noqa: BLE001
             # Bir yorumda hata olsa bile diğerlerini işlemeye devam et;
@@ -295,7 +339,8 @@ def main():
             pending_reviews[review_key_val] = {**info, "attempts": attempts}
             print(f"[pending] {reviewer_name} hâlâ bekliyor (deneme {attempts}/{MAX_TEXT_WAIT_ATTEMPTS}), "
                   f"bu run'da yeniden bulunamadı.")
-            state_changed = True
+            _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                     next_template_index, f"{reviewer_name} pending yaslandi (deneme {attempts})")
             continue
 
         print(f"[pending] {reviewer_name}: {MAX_TEXT_WAIT_ATTEMPTS} denemede de bu yorum bir daha "
@@ -311,8 +356,11 @@ def main():
         attempts_this_run += 1
         try:
             _, next_template_index = _post_review_to_instagram(synthetic_review, cfg, _get_ig(), next_template_index)
-            newly_processed_review_keys.append(review_key_val)
+            processed_review_keys.add(review_key_val)
             processed += 1
+            pending_reviews.pop(review_key_val, None)
+            _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                     next_template_index, f"{reviewer_name} pending-timeout paylasildi")
         except Exception as exc:  # noqa: BLE001
             # Paylaşım başarısız olursa bekleme listesinde bırak (silme),
             # bir sonraki run'da tekrar denensin (ama deneme sayısı zaten
@@ -320,21 +368,9 @@ def main():
             # eder - bu kasıtlı, aksi halde o yorum tamamen kaybolurdu).
             print(f"HATA (pending, {reviewer_name}): {exc}", file=sys.stderr)
             pending_reviews[review_key_val] = {**info, "attempts": attempts}
-            state_changed = True
+            _persist(processed_message_ids, processed_review_keys, pending_reviews,
+                     next_template_index, f"{reviewer_name} pending-timeout basarisiz")
             continue
-
-        pending_reviews.pop(review_key_val, None)
-        state_changed = True
-
-    if state_changed:
-        state["next_template_index"] = next_template_index
-        state["processed_message_ids"] = list(processed_message_ids) + newly_processed_message_ids
-        state["processed_review_keys"] = list(processed_review_keys) + newly_processed_review_keys
-        state["pending_reviews"] = pending_reviews
-        state_store.save_and_commit(
-            state,
-            commit_message=f"state: {processed} yorum işlendi, sıradaki şablon #{next_template_index}",
-        )
 
     print(f"Tamamlandı. {processed} yorum işlendi. Google'a yanıt yazmayı unutma (elle).")
 

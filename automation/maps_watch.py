@@ -20,6 +20,16 @@ Dönüş formatı gmail_watch.fetch_new_reviews ile aynı: her yorum için
 {"source", "reviewer_name", "rating", "business", "review_key"} sözlüğü.
 review_key, iki kaynaktan (Gmail + Haritalar) aynı yorum gelirse ikinci
 kez paylaşılmasını önlemek için review_key.py ile üretiliyor.
+
+TARİH FİLTRESİ: Google Haritalar'da SADECE BUGÜN yapılmış yorumlar
+alınır - "3 gün önce", "bir hafta önce" gibi ESKİ yorumlar (backlog'da
+kalmış, bir önceki tarama başarısız olduğu için hâlâ listede görünen
+vb.) burada elenir, results'a hiç eklenmez. Amaç: botun, günler önce
+yapılmış bir yorumu sanki bugün gelmiş gibi hikayeye paylaşmasını
+önlemek. Google'ın gösterdiği göreli zaman metni ("X saat/gün/hafta
+önce") anlaşılamazsa (DOM değişmiş olabilir), YORUM YİNE DE ALINIR -
+amaç, gerçekten yeni bir yorumun bir metin/DOM değişikliği yüzünden
+sessizce kaybolmaması (bkz. _is_from_today).
 """
 
 import json
@@ -31,6 +41,13 @@ from automation import review_key
 MAX_SCROLL_ATTEMPTS = 8
 STAR_ARIA_RE = re.compile(r"(\d+(?:[.,]\d+)?)")
 REVIEWS_LINK_RE = re.compile(r"\d+[\.,]?\d*\s*(yorum|review|değerlendirme)", re.IGNORECASE)
+RELATIVE_TIME_RE = re.compile(
+    # Google Türkçe arayüzde sayıyı bazen rakamla ("3 gün önce"), bazen
+    # "bir" kelimesiyle ("bir gün önce", "bir hafta önce") yazıyor -
+    # ikisini de yakalıyoruz.
+    r"(az önce|(?:bir|\d+)\s*(dakika|saat|gün|hafta|ay|yıl)\s*önce|dün|bugün)",
+    re.IGNORECASE,
+)
 
 DEBUG_DIR = "debug_screenshots"
 
@@ -292,6 +309,49 @@ def _extract_name(card) -> str:
     return ""
 
 
+def _extract_relative_time_text(card) -> str:
+    """Yorumun 'ne zaman yapıldığını' gösteren göreli zaman metnini
+    (örn. '3 gün önce', '2 saat önce', 'az önce') kart içindeki satırlar
+    arasından bulmaya çalışır. Google Maps bunun için genelde ayrı bir
+    class kullanıyor ama bu hesap üzerinde DevTools ile doğrulanmadı - bu
+    yüzden kırılgan bir class adına güvenmek yerine METİN DESENİYLE
+    (regex) arıyoruz; Google sayfa yapısını değiştirse bile bu metin
+    kalıbı (Türkçe arayüzde) büyük ihtimalle aynı kalır."""
+    try:
+        text = card.inner_text()
+        for line in text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            m = RELATIVE_TIME_RE.search(line.lower())
+            if m:
+                return m.group(0)
+    except Exception:
+        pass
+    return ""
+
+
+def _is_from_today(relative_time_text: str):
+    """Göreli zaman metnine bakarak yorumun BUGÜN yapılıp yapılmadığını
+    tahmin eder.
+    Dönüş: True (bugün/az önce/X dakika-saat önce) / False (bugün değil -
+    dün, X gün/hafta/ay/yıl önce) / None (metin boş ya da anlaşılamadı -
+    bu durumda ÇAĞIRAN TARAF yorumu YİNE DE işleme alır, bkz. yukarıdaki
+    modül notu)."""
+    if not relative_time_text:
+        return None
+    t = relative_time_text.lower()
+    if "az önce" in t or "bugün" in t:
+        return True
+    if "dakika önce" in t or "saat önce" in t:
+        return True
+    if "dün" in t:
+        return False
+    if "gün önce" in t or "hafta önce" in t or "ay önce" in t or "yıl önce" in t:
+        return False
+    return None
+
+
 def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int = 10,
                              storage_state: str = ""):
     """
@@ -455,6 +515,16 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                 review_text = _extract_review_text(card)
                 if not name:
                     continue
+
+                rel_time = _extract_relative_time_text(card)
+                is_today = _is_from_today(rel_time)
+                if is_today is False:
+                    print(f"[maps_watch] '{name}' yorumu bugüne ait değil ({rel_time!r}), atlanıyor.")
+                    continue
+                if is_today is None:
+                    print(f"[maps_watch] '{name}' yorumunun tarihi anlaşılamadı, "
+                          f"yine de işleme alınıyor (güvenli taraf).")
+
                 results.append({
                     "source": "maps",
                     "reviewer_name": name,
