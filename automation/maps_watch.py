@@ -311,7 +311,23 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            # ÖNEMLİ (2026-08'de teşhis edildi): headless=True ile Google
+            # Haritalar bu botu "gerçek" bir tarayıcı olarak tanımıyor ve
+            # sayfanın YORUMLAR SEKMESİ DAHİL HİÇBİR SEKME İÇERMEYEN
+            # "sınırlı görünüm" (kısıtlı, sadece "Yorum yazın" butonu olan,
+            # tıklanabilir sekme çubuğu OLMAYAN) sürümünü gönderiyor - bu
+            # yüzden hangi selector'ı denersek deneyelim sekme hiç
+            # bulunamıyordu (DOM'da gerçekten yoktu). Çözüm: tarayıcıyı
+            # headless=False ile (workflow'da xvfb sanal ekranı altında)
+            # çalıştırıp, otomasyon izlerini (navigator.webdriver vb.)
+            # gizleyerek Google'a normal bir kullanıcı gibi görünmek.
+            browser = p.chromium.launch(
+                headless=False,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                ],
+            )
             context = browser.new_context(
                 locale="tr-TR",
                 viewport={"width": 1366, "height": 900},
@@ -319,6 +335,13 @@ def fetch_reviews_from_maps(maps_url: str, business_name: str, max_reviews: int 
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                 ),
+            )
+            # navigator.webdriver=true bayrağı otomasyonu ele veren en
+            # bilinen işaretlerden biri - Google dahil pek çok site buna
+            # bakıp "sınırlı/basit" mod sunuyor. Her yeni sayfada bu
+            # bayrağı gizliyoruz.
+            context.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
             )
             page = context.new_page()
             print(f"[maps_watch] Sayfaya gidiliyor: {maps_url}")

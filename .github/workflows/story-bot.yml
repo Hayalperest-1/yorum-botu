@@ -48,7 +48,13 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python -m automation.main
+        # NOT: maps_watch.py artık tarayıcıyı headless=False açıyor (Google
+        # Haritalar'ın headless tarayıcılara gönderdiği, sekmesiz "sınırlı
+        # görünüm"den kaçınmak için) - bunun için gerçek bir ekran (X
+        # display) gerekiyor, GitHub Actions runner'ında fiziksel ekran
+        # olmadığı için "xvfb-run" ile sanal bir tane sağlıyoruz (xvfb,
+        # önceki adımda "playwright install --with-deps" ile zaten kuruldu).
+        run: xvfb-run --auto-servernum -- python -m automation.main
 
       - name: Harita taraması ekran görüntülerini yükle (teşhis için)
         if: always()
