@@ -1,44 +1,37 @@
 {
   "next_template_index": 27,
   "processed_message_ids": [
-    "<ca0979795eeb9531ea45c1dda360aed7c500fe1f-10029984-110969390@google.com>",
-    "<495e24901f969818e3ea6b9fa177990af781718f-10029984-110969390@google.com>"
+    "<495e24901f969818e3ea6b9fa177990af781718f-10029984-110969390@google.com>",
+    "<ca0979795eeb9531ea45c1dda360aed7c500fe1f-10029984-110969390@google.com>"
   ],
   "processed_review_keys": [
-    "50a523a4bf1d67fa7734169b",
-    "32ecfa6559c18026d957b9a0",
-    "c73855faac287797a76658d9",
-    "4e935c23627d16c189d01574",
-    "73cc5d005ceb19a4cd2a62da",
+    "1bfd9598ab351ad60cd85776",
+    "119e5f1af90bad398afb7bb4",
+    "cbaf1b9b75e12e64d536441a",
     "a340b0c424109b3c6fe10cfd",
-    "1d53b8425594759746e2a133",
+    "1672112f91e6086bc9a4108f",
+    "878f2ea2f6e97b02ff3b9ff4",
     "d6497cfabc49c672838ec9c6",
     "ce1595e0d96c26c16df67287",
-    "1bfd9598ab351ad60cd85776",
-    "6392bbff195cd4042903a121",
-    "407bcb319567987f5becec9a",
-    "5ad4b62846d0eda91df2a28f",
     "52e7314883d7b6c78b309042",
-    "05ca3ed0bf9ebd0410f57fa8",
-    "cbaf1b9b75e12e64d536441a",
-    "878f2ea2f6e97b02ff3b9ff4",
-    "c2c29ec31bdf9894d1ef05b1",
     "8085881f31df7d44e1db6390",
-    "1672112f91e6086bc9a4108f",
-    "b80e9c4f570cf31ea580cc90",
+    "73cc5d005ceb19a4cd2a62da",
+    "32ecfa6559c18026d957b9a0",
     "8e0ae7eb169bfe76d811ff37",
-    "bc5fbaed369cfa0b7c27ea8f",
-    "119e5f1af90bad398afb7bb4",
+    "5ad4b62846d0eda91df2a28f",
     "14c7df7a1c1a92dbf7f6cd4c",
+    "407bcb319567987f5becec9a",
+    "6392bbff195cd4042903a121",
+    "05ca3ed0bf9ebd0410f57fa8",
+    "eaf88dcf7d96150ff9e1d3c6",
+    "1d53b8425594759746e2a133",
+    "4e935c23627d16c189d01574",
+    "c2c29ec31bdf9894d1ef05b1",
+    "c73855faac287797a76658d9",
     "caa5901597faa900f1d42636",
-    "eaf88dcf7d96150ff9e1d3c6"
+    "b80e9c4f570cf31ea580cc90",
+    "50a523a4bf1d67fa7734169b",
+    "bc5fbaed369cfa0b7c27ea8f"
   ],
-  "pending_reviews": {
-    "40295fa641f30995f2e137ab": {
-      "attempts": 5,
-      "reviewer_name": "Reyyan Beyza Önderci",
-      "rating": 5,
-      "business": "Niğde Gezi Otobüsü"
-    }
-  }
+  "pending_reviews": {}
 }
