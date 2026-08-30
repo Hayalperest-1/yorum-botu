@@ -5,27 +5,27 @@
     "<ca0979795eeb9531ea45c1dda360aed7c500fe1f-10029984-110969390@google.com>"
   ],
   "processed_review_keys": [
-    "73cc5d005ceb19a4cd2a62da",
-    "8085881f31df7d44e1db6390",
-    "8e0ae7eb169bfe76d811ff37",
-    "52e7314883d7b6c78b309042",
-    "1672112f91e6086bc9a4108f",
+    "6392bbff195cd4042903a121",
     "caa5901597faa900f1d42636",
-    "5ad4b62846d0eda91df2a28f",
-    "407bcb319567987f5becec9a",
-    "1bfd9598ab351ad60cd85776",
     "cbaf1b9b75e12e64d536441a",
-    "ce1595e0d96c26c16df67287",
-    "50a523a4bf1d67fa7734169b",
-    "14c7df7a1c1a92dbf7f6cd4c",
+    "5ad4b62846d0eda91df2a28f",
     "c2c29ec31bdf9894d1ef05b1",
-    "119e5f1af90bad398afb7bb4",
+    "73cc5d005ceb19a4cd2a62da",
+    "407bcb319567987f5becec9a",
+    "ce1595e0d96c26c16df67287",
     "c73855faac287797a76658d9",
-    "878f2ea2f6e97b02ff3b9ff4",
-    "32ecfa6559c18026d957b9a0",
+    "1672112f91e6086bc9a4108f",
     "b80e9c4f570cf31ea580cc90",
-    "a340b0c424109b3c6fe10cfd",
-    "6392bbff195cd4042903a121"
+    "32ecfa6559c18026d957b9a0",
+    "8e0ae7eb169bfe76d811ff37",
+    "14c7df7a1c1a92dbf7f6cd4c",
+    "1bfd9598ab351ad60cd85776",
+    "878f2ea2f6e97b02ff3b9ff4",
+    "50a523a4bf1d67fa7734169b",
+    "8085881f31df7d44e1db6390",
+    "52e7314883d7b6c78b309042",
+    "119e5f1af90bad398afb7bb4",
+    "a340b0c424109b3c6fe10cfd"
   ],
   "pending_reviews": {
     "4e935c23627d16c189d01574": {
@@ -35,7 +35,7 @@
       "business": "Niğde Gezi Otobüsü"
     },
     "40295fa641f30995f2e137ab": {
-      "attempts": 1,
+      "attempts": 2,
       "reviewer_name": "Reyyan Beyza Önderci",
       "rating": 5,
       "business": "Niğde Gezi Otobüsü"
