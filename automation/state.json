@@ -1,5 +1,5 @@
 {
-  "next_template_index": 26,
+  "next_template_index": 27,
   "processed_message_ids": [
     "<ca0979795eeb9531ea45c1dda360aed7c500fe1f-10029984-110969390@google.com>",
     "<495e24901f969818e3ea6b9fa177990af781718f-10029984-110969390@google.com>"
@@ -8,6 +8,7 @@
     "50a523a4bf1d67fa7734169b",
     "32ecfa6559c18026d957b9a0",
     "c73855faac287797a76658d9",
+    "4e935c23627d16c189d01574",
     "73cc5d005ceb19a4cd2a62da",
     "a340b0c424109b3c6fe10cfd",
     "1d53b8425594759746e2a133",
@@ -33,12 +34,6 @@
     "eaf88dcf7d96150ff9e1d3c6"
   ],
   "pending_reviews": {
-    "4e935c23627d16c189d01574": {
-      "attempts": 5,
-      "reviewer_name": "Nihal TAMER",
-      "rating": 5,
-      "business": "Niğde Gezi Otobüsü"
-    },
     "40295fa641f30995f2e137ab": {
       "attempts": 5,
       "reviewer_name": "Reyyan Beyza Önderci",
